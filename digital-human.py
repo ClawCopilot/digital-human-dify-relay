@@ -36,8 +36,8 @@ mock_time_created = 20230512084843
 mock_id1 = "131424542124"
 mock_id2 = "1231414141541252525"
 mock_user = "abc-123"
-dify_url = "http://<your dify ip>/v1/chat-messages"
-dify_api_key = 'Bearer <your dify api key>'
+dify_url = os.getenv("DIFY_URL", "")
+dify_api_key = "Bearer " + os.getenv("DIFY_API_KEY", "")
 
 
 class Message(BaseModel):
@@ -54,8 +54,8 @@ class Resquest_Body(BaseModel):
 
 # 对接dify，非流式传输
 def request_dify_api(question, request, conversation_id):
-    # 目标URL
-    url = dify_url
+    # 目标URL（自动拼接 /chat-messages）
+    url = dify_url.rstrip("/") + "/chat-messages"
     headers_json = {
         'Content-Type': 'application/json',
         'Authorization': dify_api_key
@@ -72,12 +72,11 @@ def request_dify_api(question, request, conversation_id):
     response = requests.post(url, data=json.dumps(data), headers=headers_json)
     resp_data = response.json()
     return resp_data["answer"]
-    return resp_data["answer"]
 
 
 # 对接dify，流式传输
 async def generate_streaming_messages(question, request, session_id, conversation_id):
-    url = dify_url
+    url = dify_url.rstrip("/") + "/chat-messages"
     headers_json = {
         'Content-Type': 'application/json',
         'Authorization': dify_api_key
