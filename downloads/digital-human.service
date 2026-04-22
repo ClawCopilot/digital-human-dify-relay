@@ -1,0 +1,11 @@
+[Unit]
+Description=Digital Human Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=nohup python3 /digital-human.py &
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
