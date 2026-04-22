@@ -134,52 +134,100 @@ async def health_check():
 
 
 # ──────────────────────────────────────────────────────────────
+# Dify 响应格式转 OpenAI 兼容格式
+# ──────────────────────────────────────────────────────────────
+def dify_to_openai(dify_resp: Dict[str, Any], model: str = "dify") -> Dict[str, Any]:
+    """
+    将 Dify /chat-messages 的响应转换为 OpenAI /chat/completions 兼容格式。
+    Dify 响应示例: { answer: "...", conversation_id: "...", task_id: "..." }
+    OpenAI 目标格式: { id, model, choices: [{ message: { role: "assistant", content: "..." } }] }
+    """
+    return {
+        "id": f"chatcmpl-{dify_resp.get('task_id', 'unknown')}",
+        "object": "chat.completion",
+        "created": 0,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": dify_resp.get("answer", ""),
+                },
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
+    }
+
+
+# ──────────────────────────────────────────────────────────────
 # 核心转发接口
 # ──────────────────────────────────────────────────────────────
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     """
-    转发 chat/completions 请求到 Dify。
-    支持缓存（可选）：相同请求体会命中 Redis 缓存。
+    接收 OpenAI 兼容格式请求，转换为 Dify /chat-messages 格式后转发。
+    OpenAI 格式: { model, messages: [{role, content}], stream }
+    Dify 格式:   { query, user, response_mode, inputs }
     """
-    # 读取请求体
     body = await request.json()
 
-    # 检查 Redis 缓存
+    # ── 格式转换：OpenAI -> Dify ──────────────────────────────
+    # 提取用户最新消息
+    user_content = ""
+    for msg in reversed(body.get("messages", [])):
+        if msg.get("role") == "user":
+            user_content = msg.get("content", "")
+            break
+
+    if not user_content:
+        raise HTTPException(status_code=400, detail="未找到用户消息")
+
+    # 生成或复用 user 标识（用于 Dify 会话上下文）
+    dify_user = body.get("user", "anonymous")
+    response_mode = "blocking" if not body.get("stream", False) else "streaming"
+
+    # 构建 Dify 请求体
+    dify_payload = {
+        "query": user_content,
+        "user": dify_user,
+        "response_mode": response_mode,
+        "inputs": body.get("inputs", {}),
+    }
+
+    # 若应用要求 inputs 字段但为空，补上空对象
+    if "inputs" not in dify_payload or dify_payload["inputs"] is None:
+        dify_payload["inputs"] = {}
+
+    # ── 检查 Redis 缓存（基于 OpenAI 原始请求体）──────────────
+    cache_key = get_cache_key(body)
     try:
-        r = get_redis()
-        cache_key = get_cache_key(body)
-        cached = r.get(cache_key)
+        cached = get_redis().get(cache_key)
         if cached:
             logger.info(f"缓存命中: {cache_key}")
-            return json.loads(cached)
+            return dify_to_openai(json.loads(cached), model=body.get("model", "dify"))
     except RedisConnectionError:
         logger.warning("Redis 不可用，跳过缓存读取")
 
-    # 构建转发请求头
+    # ── 转发到 Dify ─────────────────────────────────────────
     headers = {
         "Authorization": f"Bearer {DIFY_API_KEY}",
         "Content-Type": "application/json",
     }
-
-    # 转发到 Dify（Dify 原生端点 /chat-messages）
-    # 确保 body 包含 inputs 字段（Dify 应用可能要求此字段）
-    if "inputs" not in body:
-        body["inputs"] = {}
-
     dify_endpoint = f"{DIFY_URL.rstrip('/')}/chat-messages"
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                dify_endpoint,
-                json=body,
-                headers=headers,
-            )
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(dify_endpoint, json=dify_payload, headers=headers)
             resp.raise_for_status()
             result = resp.json()
     except httpx.HTTPStatusError as e:
-        logger.error(f"Dify 返回错误状态码 {e.response.status_code}: {e.response.text}")
+        logger.error(f"Dify 返回错误 {e.response.status_code}: {e.response.text}")
         raise HTTPException(
             status_code=e.response.status_code,
             detail=f"Dify 请求失败: {e.response.text}",
@@ -188,14 +236,14 @@ async def chat_completions(request: Request):
         logger.error(f"无法连接 Dify 服务: {e}")
         raise HTTPException(status_code=502, detail=f"无法连接 Dify 服务: {e}")
 
-    # 写入 Redis 缓存（TTL = 300 秒）
+    # ── 写入缓存（存 Dify 原始格式）───────────────────────────
     try:
-        r = get_redis()
-        r.setex(cache_key, 300, json.dumps(result))
+        get_redis().setex(cache_key, 300, json.dumps(result))
     except RedisConnectionError:
         pass
 
-    return result
+    # ── 响应转 OpenAI 兼容格式 ─────────────────────────────────
+    return dify_to_openai(result, model=body.get("model", "dify"))
 
 
 # ──────────────────────────────────────────────────────────────
