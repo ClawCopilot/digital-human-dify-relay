@@ -5,10 +5,27 @@ import uuid
 import requests
 from fastapi.responses import StreamingResponse
 from fastapi import FastAPI, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+async def root():
+    """健康检查端点，配合 docker-compose healthcheck 使用"""
+    return {"status": "ok"}
+
+
 # 连接到Redis服务器（默认端口是6379）
 redis_instance = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
