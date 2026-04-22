@@ -1,0 +1,7 @@
+# Python 运行时依赖
+# Dockerfile 中已优先使用清华镜像加速安装
+
+redis==5.0.1
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+httpx==0.26.0

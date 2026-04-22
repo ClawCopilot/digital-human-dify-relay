@@ -1,0 +1,62 @@
+# ============================================================
+# 数字人对接中转服务 - docker-compose.yml
+#
+# 使用方法：
+#   1. 将 DIFY_URL 和 DIFY_API_KEY 填入 .env 文件
+#   2. 执行: docker compose up -d
+#   3. 验证: curl http://localhost:8000
+# ============================================================
+
+services:
+
+  # ── Redis 缓存服务 ──────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: digital-human-redis
+    restart: unless-stopped
+    # 生产环境建议取消注释以下 networks 和 ports 配置
+    # networks:
+    #   - digital-human-net
+    # ports:
+    #   - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── 数字人对接中转服务 ──────────────────────────────────
+  digital-human:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digital-human-relay
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Dify 服务地址，如 https://atwdify.antiwearvalve.com/v1
+      DIFY_URL: "${DIFY_URL}"
+      # Dify API 密钥，如 app-PDkSHiHZsZIluoZF7N2OlNZM
+      DIFY_API_KEY: "${DIFY_API_KEY}"
+      # Redis 连接地址（服务名方式，Docker Compose 内部 DNS）
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    # networks:
+    #   - digital-human-net
+
+# ============================================================
+#  网络配置（生产环境取消注释）
+# ============================================================
+# networks:
+#   digital-human-net:
+#     driver: bridge
