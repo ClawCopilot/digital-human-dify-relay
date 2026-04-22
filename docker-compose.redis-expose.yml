@@ -1,0 +1,17 @@
+# ============================================================
+# Redis 端口暴露扩展配置
+#
+# 场景：需要从宿主机直接连接 Redis（如本地调试）时使用。
+#
+# 使用方式（与 docker-compose.yml 合并）：
+#   docker compose -f docker-compose.yml -f docker-compose.redis-expose.yml up -d
+#
+# 注意：日常生产部署不需要此文件，直接运行 docker-compose.yml 即可。
+# ============================================================
+
+services:
+  redis:
+    ports:
+      - "${REDIS_EXPOSE_PORT:-6379}:6379"
+    networks:
+      - digital-human-net
