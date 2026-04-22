@@ -15,10 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # ── 安装 Python 运行时依赖 ────────────────────────────────
-# 优先使用清华镜像加速，镜像不可用时自动回退到官方 PyPI
+# 优先使用清华镜像，镜像不可用时自动回退到官方 PyPI
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    || pip install --no-cache-dir -r requirements.txt
+RUN /bin/sh -c "pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    || pip install --no-cache-dir -r requirements.txt"
 
 # ── 复制应用代码 ──────────────────────────────────────────
 COPY digital-human.py .
