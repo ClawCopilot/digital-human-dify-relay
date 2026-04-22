@@ -1,4 +1,5 @@
 import json
+import os
 import redis
 import uuid
 import requests
@@ -9,7 +10,11 @@ from typing import Optional, List
 
 app = FastAPI()
 # 连接到Redis服务器（默认端口是6379）
-redis_instance = redis.Redis(host='localhost', port=6379, db=0)
+redis_instance = redis.Redis(
+    host=os.getenv("REDIS_HOST", "localhost"),
+    port=int(os.getenv("REDIS_PORT", "6379")),
+    db=0,
+)
 mock_time_created = 20230512084843
 mock_id1 = "131424542124"
 mock_id2 = "1231414141541252525"
@@ -48,8 +53,9 @@ def request_dify_api(question, request, conversation_id):
 
     # 发送POST请求
     response = requests.post(url, data=json.dumps(data), headers=headers_json)
-    data = json.loads(response)
-    return data["answer"]
+    resp_data = response.json()
+    return resp_data["answer"]
+    return resp_data["answer"]
 
 
 # 对接dify，流式传输
