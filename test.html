@@ -230,8 +230,8 @@
 
   <div class="card">
     <div class="header">
-      <h1>Dify 中转服务 — 测试面板</h1>
-      <p>快速验证 digital-human-relay 与 Dify 的连通性</p>
+      <h1>数字人中转服务 — 测试面板</h1>
+      <p>快速验证 digital-human 与 Dify 的连通性</p>
     </div>
 
     <!-- Status -->
@@ -244,20 +244,41 @@
 
     <div class="field">
       <label>中转服务地址</label>
-      <input type="text" id="relayUrl" placeholder="http://你的服务器IP:8000" />
+      <input type="text" id="relayUrl" placeholder="http://你的服务器IP:8000" value="http://你的服务器IP:8000" />
       <small>填写 digital-human 中转服务的根地址，末尾不要加斜杠</small>
+    </div>
+
+    <div class="field">
+      <label>Session ID</label>
+      <input type="text" id="sessionId" placeholder="留空则自动生成" />
+      <small>用于多轮对话上下文，不填会自动生成</small>
     </div>
 
     <div class="row">
       <div class="field">
-        <label>Dify API 密钥</label>
-        <input type="password" id="apiKey" placeholder="app-xxxxxxxx" />
+        <label>App ID</label>
+        <input type="text" id="appId" placeholder="app-xxxxxxxx" />
+      </div>
+      <div class="field">
+        <label>User</label>
+        <input type="text" id="user" placeholder="user-xxx" />
       </div>
     </div>
 
+    <div class="field">
+      <label>测试消息</label>
+      <textarea id="message" placeholder="请输入你想问的问题...">你好，请用一句话介绍自己。</textarea>
+    </div>
+
+    <div class="field">
+      <label>
+        <input type="checkbox" id="streamMode" checked style="width:auto;margin-right:6px;" />
+        流式传输（Streaming）
+      </label>
+    </div>
+
     <div class="btn-row">
-      <button class="btn btn-ghost" onclick="testHealth()">健康检查</button>
-      <button class="btn btn-primary" id="sendBtn" onclick="sendMessage()">发送测试请求</button>
+      <button class="btn btn-primary" id="sendBtn" onclick="sendMessage()">发送请求</button>
     </div>
   </div>
 
@@ -277,8 +298,12 @@
   let abortController = null;
 
   // ── Helpers ────────────────────────────────────────────────
-  const relayUrl = () => document.getElementById('relayUrl').value.replace(/\/$/, '');
-  const apiKey   = () => document.getElementById('apiKey').value.trim();
+  const relayUrl   = () => document.getElementById('relayUrl').value.replace(/\/$/, '');
+  const sessionId = () => document.getElementById('sessionId').value.trim() || crypto.randomUUID();
+  const appId     = () => document.getElementById('appId').value.trim();
+  const user      = () => document.getElementById('user').value.trim() || 'test-user';
+  const message   = () => document.getElementById('message').value.trim();
+  const isStream  = () => document.getElementById('streamMode').checked;
 
   function setStatus(type, text) {
     const dot  = document.getElementById('statusDot');
@@ -310,32 +335,13 @@
     document.getElementById('streamingIndicator').style.display = loading ? 'flex' : 'none';
   }
 
-  // ── Health Check ───────────────────────────────────────────
-  async function testHealth() {
-    const url = relayUrl();
-    if (!url) { alert('请先填写"中转服务地址"'); return; }
-    clearOutput();
-    setStatus('idle', '检测中…');
-    try {
-      const res = await fetch(`${url}/health`);
-      const data = await res.json().catch(() => ({}));
-      clearOutput();
-      append(`HTTP 状态码: ${res.status}\n`, res.ok ? 'success-text' : 'error-text');
-      append(JSON.stringify(data, null, 2), res.ok ? 'success-text' : 'error-text');
-      setStatus(res.ok ? 'ok' : 'err', res.ok ? `服务正常 — ${data.status || 'ok'}` : `HTTP ${res.status}`);
-    } catch (e) {
-      clearOutput();
-      append(`连接失败：${e.message}`, 'error-text');
-      setStatus('err', '连接失败');
-    }
-  }
-
   // ── Send Message ───────────────────────────────────────────
   async function sendMessage() {
     const url = relayUrl();
-    const key = apiKey();
     if (!url) { alert('请填写"中转服务地址"'); return; }
-    if (!key) { alert('请填写"Dify API 密钥"'); return; }
+
+    const msg = message();
+    if (!msg) { alert('请填写"测试消息"'); return; }
 
     // abort previous
     if (abortController) abortController.abort();
@@ -346,47 +352,88 @@
     setStatus('idle', '请求中…');
 
     const payload = {
-      stream: false,
-      messages: [
-        { role: 'user', content: '你好，请用一句话介绍自己。' }
-      ]
+      messages: [{ content: msg }],
+      app_id: appId() || 'test-app',
+      user: user(),
+      session_id: sessionId(),
+      is_stream: isStream(),
     };
 
-    append(`POST ${url}/v1/chat/completions\n`);
-    append(`Authorization: Bearer ${key.substring(0, 8)}…\n\n`);
+    append(`POST ${url}/digital-human\n\n`);
     append(`Request:\n${JSON.stringify(payload, null, 2)}\n\n`);
     append(`Response:\n`);
 
     try {
-      // Direct to Dify (bypass relay — useful if relay itself has issues)
-      const endpoint = `${url}/v1/chat/completions`;
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`,
-        },
-        body: JSON.stringify(payload),
-        signal: abortController.signal,
-      });
+      if (isStream()) {
+        // ── Streaming ───────────────────────────────────────
+        const endpoint = `${url}/digital-human`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: abortController.signal,
+        });
 
-      const raw = await res.text();
-      let data;
-      try { data = JSON.parse(raw); } catch { data = raw; }
+        if (!res.ok) {
+          const errText = await res.text();
+          append(`[${res.status}] ERROR\n${errText}`, 'error-text');
+          setStatus('err', `HTTP ${res.status}`);
+          return;
+        }
 
-      append(`[${res.status}] `, res.ok ? 'success-text' : 'error-text');
-      append(`${res.ok ? 'OK' : 'ERROR'}\n\n`, res.ok ? 'success-text' : 'error-text');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
 
-      if (res.ok && data.choices) {
-        const reply = data.choices[0]?.message?.content || '';
-        append(`回复内容：\n${reply}`, 'success-text');
-        setStatus('ok', '请求成功');
-      } else if (res.ok && data.error) {
-        append(`Dify 错误：${JSON.stringify(data.error, null, 2)}`, 'error-text');
-        setStatus('err', 'Dify 返回错误');
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === 'data: [DONE]' || trimmed === 'data:') continue;
+            if (trimmed.startsWith('data: ')) {
+              try {
+                const raw = trimmed.slice(6);
+                const chunk = JSON.parse(raw);
+                const content = chunk?.choices?.[0]?.message?.content || '';
+                if (content) append(content, 'success-text');
+              } catch { /* skip malformed */ }
+            }
+          }
+        }
+
+        append('\n\n[DONE]', 'warn-text');
+        setStatus('ok', '流式响应完成');
       } else {
-        append(`原始响应：\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`, 'error-text');
-        setStatus('err', `HTTP ${res.status}`);
+        // ── Non-Streaming ────────────────────────────────────
+        const endpoint = `${url}/digital-human`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: abortController.signal,
+        });
+
+        const raw = await res.text();
+        let data;
+        try { data = JSON.parse(raw); } catch { data = raw; }
+
+        append(`[${res.status}] `, res.ok ? 'success-text' : 'error-text');
+        append(`${res.ok ? 'OK' : 'ERROR'}\n\n`, res.ok ? 'success-text' : 'error-text');
+
+        if (res.ok && data.choices) {
+          const reply = data.choices[0]?.message?.content || '';
+          append(`回复内容：\n${reply}`, 'success-text');
+          setStatus('ok', '请求成功');
+        } else {
+          append(`原始响应：\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`, 'error-text');
+          setStatus('err', `HTTP ${res.status}`);
+        }
       }
     } catch (e) {
       if (e.name === 'AbortError') {
