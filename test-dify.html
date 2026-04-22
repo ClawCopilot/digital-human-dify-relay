@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dify API — 直连测试</title>
+  <style>
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3a;
+      --primary: #6366f1; --primary-hover: #4f46e5;
+      --accent: #22d3ee; --text: #e2e8f0; --muted: #64748b;
+      --success: #22c55e; --error: #ef4444; --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; align-items: center;
+      justify-content: center; padding: 24px;
+    }
+    .container { width: 100%; max-width: 680px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px; margin-bottom: 20px;
+    }
+    .header { text-align: center; margin-bottom: 32px; }
+    .header h1 {
+      font-size: 1.5rem; font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    .header p { font-size: 0.85rem; color: var(--muted); }
+    .badge {
+      display: inline-block; background: #1e2a3a; border: 1px solid var(--border);
+      border-radius: 20px; font-size: 0.7rem; color: var(--accent);
+      padding: 2px 10px; margin-top: 8px; letter-spacing: 0.05em;
+    }
+    .field { margin-bottom: 18px; }
+    .field label {
+      display: block; font-size: 0.78rem; font-weight: 600;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 8px;
+    }
+    .field input {
+      width: 100%; background: #111827; border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); font-size: 0.9rem;
+      padding: 10px 14px; transition: border-color 0.2s; outline: none;
+      font-family: 'Fira Code', 'Consolas', monospace;
+    }
+    .field input:focus { border-color: var(--primary); }
+    .field small { display: block; color: var(--muted); font-size: 0.75rem; margin-top: 5px; }
+    .btn-row { display: flex; gap: 12px; margin-top: 24px; }
+    .btn {
+      flex: 1; padding: 11px; border: none; border-radius: 10px;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost {
+      background: transparent; border: 1px solid var(--border); color: var(--muted);
+    }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--text); }
+    .status-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; background: #111827; border: 1px solid var(--border);
+      border-radius: 10px; margin-bottom: 20px; font-size: 0.85rem;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot.ok   { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .dot.err  { background: var(--error);  box-shadow: 0 0 6px var(--error);  }
+    .dot.idle { background: var(--muted); }
+    #output {
+      background: #0a0d14; border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; font-family: 'Fira Code', 'Consolas', monospace;
+      font-size: 0.8rem; line-height: 1.75; color: #a5b4fc;
+      white-space: pre-wrap; word-break: break-all; max-height: 420px;
+      overflow-y: auto; min-height: 80px;
+    }
+    #output::-webkit-scrollbar { width: 5px; }
+    #output::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .error-text  { color: #fca5a5; }
+    .success-text { color: #86efac; }
+    .warn-text   { color: #fcd34d; }
+    .meta-text   { color: #94a3b8; }
+    .spinner-wrap {
+      display: none; align-items: center; gap: 8px;
+      color: var(--accent); font-size: 0.85rem; margin-bottom: 12px;
+    }
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .section-title {
+      font-size: 0.75rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="card">
+    <div class="header">
+      <h1>Dify API 直连测试</h1>
+      <p>直接在浏览器测试 Dify 接口，无需中转服务</p>
+      <span class="badge">纯前端 · 不经过任何中转</span>
+    </div>
+
+    <div class="status-bar">
+      <div class="dot idle" id="statusDot"></div>
+      <span id="statusText">尚未测试</span>
+    </div>
+
+    <div class="section-title">接口配置</div>
+
+    <div class="field">
+      <label>API BASE_URL</label>
+      <input type="text" id="baseUrl" placeholder="https://atwdify.antiwearvalve.com" />
+      <small>填 Dify 对外可访问的根地址，末尾不要加斜杠</small>
+    </div>
+
+    <div class="field">
+      <label>API KEY</label>
+      <input type="password" id="apiKey" placeholder="app-xxxxxxxxxxxxxxxx" />
+      <small>从 Dify 应用 → API 密钥 中复制完整密钥</small>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="testHealth()">健康检查</button>
+      <button class="btn btn-primary" id="sendBtn" onclick="sendMessage()">发送测试</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">响应输出</div>
+    <div class="spinner-wrap" id="spinner">
+      <div class="spinner"></div>
+      <span>AI 正在生成回复…</span>
+    </div>
+    <div id="output">// 响应结果将在此显示</div>
+  </div>
+
+</div>
+
+<script>
+  let abortCtrl = null;
+
+  function $id(id) { return document.getElementById(id); }
+  function baseUrl() { return $id('baseUrl').value.replace(/\/$/, ''); }
+  function apiKey()  { return $id('apiKey').value.trim(); }
+
+  function setStatus(type, text) {
+    $id('statusDot').className  = 'dot ' + type;
+    $id('statusText').textContent = text;
+  }
+  function clearOut() { $id('output').innerHTML = ''; }
+  function append(text, cls) {
+    var el = $id('output');
+    var span = document.createElement('span');
+    if (cls) span.className = cls;
+    span.textContent = text;
+    el.appendChild(span);
+    el.scrollTop = el.scrollHeight;
+  }
+  function nl() { append('\n'); }
+
+  function setLoading(on) {
+    $id('sendBtn').disabled = on;
+    $id('spinner').style.display = on ? 'flex' : 'none';
+  }
+
+  // ── Health Check ───────────────────────────────────────
+  async function testHealth() {
+    var url = baseUrl();
+    if (!url) { alert('请填写 API BASE_URL'); return; }
+    clearOut();
+    setStatus('idle', '检测中…');
+    append('POST ' + url + '/chat-messages\n', 'meta-text');
+    try {
+      var res = await fetch(url + '/chat-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (apiKey() || ''),
+        },
+        body: JSON.stringify({
+          query: 'health-check',
+          user: 'test-user',
+          response_mode: 'blocking',
+          inputs: {},
+        }),
+      });
+      var raw = await res.text();
+      var data;
+      try { data = JSON.parse(raw); } catch { data = raw; }
+
+      nl();
+      if (res.status === 200) {
+        append('✅ 连接成功 — HTTP ' + res.status + '\n', 'success-text');
+        append('接口可达\n', 'meta-text');
+        setStatus('ok', '接口可达');
+      } else if (res.status >= 400) {
+        append('[HTTP ' + res.status + '] 连接可达\n', 'success-text');
+        append('响应：' + JSON.stringify(data, null, 2), '');
+        setStatus('ok', '接口可达');
+      } else {
+        append('[HTTP ' + res.status + ']\n', '');
+        append(JSON.stringify(data, null, 2), '');
+        setStatus('ok', 'HTTP ' + res.status);
+      }
+    } catch (e) {
+      nl();
+      append('❌ 连接失败：' + e.message, 'error-text');
+      setStatus('err', '无法连接');
+    }
+  }
+
+  // ── Send Message ───────────────────────────────────────
+  async function sendMessage() {
+    var url = baseUrl();
+    var key = apiKey();
+    if (!url) { alert('请填写 API BASE_URL'); return; }
+    if (!key) { alert('请填写 API KEY'); return; }
+
+    if (abortCtrl) abortCtrl.abort();
+    abortCtrl = new AbortController();
+
+    clearOut();
+    setLoading(true);
+    setStatus('idle', '请求中…');
+
+    var payload = {
+      query: '你好，请用一句话介绍自己。',
+      user: 'test-user',
+      response_mode: 'blocking',
+      inputs: {},
+    };
+
+    append('POST ' + url + '/chat-messages\n', 'meta-text');
+    append('Authorization: Bearer ' + key.slice(0, 8) + '…\n', 'meta-text');
+    nl();
+    append('Request:\n' + JSON.stringify(payload, null, 2) + '\n\n', 'meta-text');
+    append('Response:\n');
+
+    try {
+      var res = await fetch(url + '/chat-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + key,
+        },
+        body: JSON.stringify(payload),
+        signal: abortCtrl.signal,
+      });
+
+      var raw = await res.text();
+      var data;
+      try { data = JSON.parse(raw); } catch { data = raw; }
+
+      append('[' + res.status + '] ', res.ok ? 'success-text' : 'error-text');
+      append((res.ok ? 'OK' : 'ERROR') + '\n\n', res.ok ? 'success-text' : 'error-text');
+
+      if (res.ok && data.answer) {
+        append('回复内容：\n' + data.answer, 'success-text');
+        if (data.conversation_id) {
+          append('\n\n会话ID：' + data.conversation_id, 'meta-text');
+        }
+        setStatus('ok', '测试成功');
+      } else if (data.error) {
+        append('Dify 错误：\n' + JSON.stringify(data.error, null, 2), 'error-text');
+        setStatus('err', 'Dify 返回错误');
+      } else {
+        append(typeof data === 'string' ? data : JSON.stringify(data, null, 2), '');
+        setStatus('err', 'HTTP ' + res.status);
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        append('请求已取消', 'warn-text');
+        setStatus('idle', '已取消');
+      } else {
+        append('网络错误：' + e.message, 'error-text');
+        setStatus('err', '网络错误');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+</script>
+</body>
+</html>

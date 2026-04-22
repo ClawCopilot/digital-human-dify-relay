@@ -162,8 +162,12 @@ async def chat_completions(request: Request):
         "Content-Type": "application/json",
     }
 
-    # 转发到 Dify
-    dify_endpoint = f"{DIFY_URL.rstrip('/')}/chat/completions"
+    # 转发到 Dify（Dify 原生端点 /chat-messages）
+    # 确保 body 包含 inputs 字段（Dify 应用可能要求此字段）
+    if "inputs" not in body:
+        body["inputs"] = {}
+
+    dify_endpoint = f"{DIFY_URL.rstrip('/')}/chat-messages"
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
