@@ -35,7 +35,7 @@ curl http://localhost:8000/health
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "your-model",
+    "model": "dify",
     "messages": [{"role": "user", "content": "你好"}]
   }'
 ```

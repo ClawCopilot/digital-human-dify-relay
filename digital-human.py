@@ -136,7 +136,7 @@ async def health_check():
 # ──────────────────────────────────────────────────────────────
 # Dify 响应格式转 OpenAI 兼容格式
 # ──────────────────────────────────────────────────────────────
-def dify_to_openai(dify_resp: Dict[str, Any], model: str = "dify") -> Dict[str, Any]:
+def dify_to_openai(dify_resp: Dict[str, Any]) -> Dict[str, Any]:
     """
     将 Dify /chat-messages 的响应转换为 OpenAI /chat/completions 兼容格式。
     Dify 响应示例: { answer: "...", conversation_id: "...", task_id: "..." }
@@ -146,7 +146,7 @@ def dify_to_openai(dify_resp: Dict[str, Any], model: str = "dify") -> Dict[str, 
         "id": f"chatcmpl-{dify_resp.get('task_id', 'unknown')}",
         "object": "chat.completion",
         "created": 0,
-        "model": model,
+        "model": "dify",
         "choices": [
             {
                 "index": 0,
@@ -210,7 +210,7 @@ async def chat_completions(request: Request):
         cached = get_redis().get(cache_key)
         if cached:
             logger.info(f"缓存命中: {cache_key}")
-            return dify_to_openai(json.loads(cached), model=body.get("model", "dify"))
+            return dify_to_openai(json.loads(cached))
     except RedisConnectionError:
         logger.warning("Redis 不可用，跳过缓存读取")
 
@@ -243,7 +243,7 @@ async def chat_completions(request: Request):
         pass
 
     # ── 响应转 OpenAI 兼容格式 ─────────────────────────────────
-    return dify_to_openai(result, model=body.get("model", "dify"))
+    return dify_to_openai(result)
 
 
 # ──────────────────────────────────────────────────────────────
